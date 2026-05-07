@@ -1,0 +1,515 @@
+openapi: 3.1.0
+
+info:
+  title: Wheel the World — Accessibility Data Catalog API
+  version: 0.1.0-beta
+  description: |
+    REST API that provides third-party partners with access to Wheel the World's
+    catalog of accessibility information.
+
+    > **Beta notice:** This API is currently in beta. Endpoints, request parameters,
+    > and response schemas may change at any time without prior notice. Backwards
+    > compatibility is not guaranteed until a stable release is announced.
+
+    ## Authentication
+    All requests require a Bearer token issued by the Wheel the World customer
+    service team. Include it in every request:
+
+    ```
+    Authorization: Bearer <your_token>
+    ```
+  contact:
+    name: Wheel the World Customer Service
+    email: partners@wheeltheworld.com
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.wheeltheworld.com/public-api
+    description: Production
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Listings
+    description: Accessibility catalog listings.
+
+paths:
+  /listings/{listingType}/{listingId}:
+    get:
+      operationId: getListing
+      summary: Get a listing by type and ID
+      description: |
+        Returns the full listing record — including accessibility information and,
+        for `placesToStay` listings, the rooms collection — for the given type and
+        catalog ID.
+      tags:
+        - Listings
+      parameters:
+        - $ref: '#/components/parameters/listingType'
+        - $ref: '#/components/parameters/listingId'
+      responses:
+        '200':
+          description: Listing found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+              examples:
+                placesToStay:
+                  summary: A hotel listing
+                  value:
+                    id: hotel-abc-123
+                    type: placesToStay
+                    name: The Accessible Inn
+                    provider:
+                      code: partner-x
+                      id: PX-00042
+                    accessibility:
+                      areas:
+                        - name: Building Entrance
+                          featureSets:
+                            - type: entrance
+                              featureSet:
+                                areThereStepsInEntrance:
+                                  name: areThereStepsInEntrance
+                                  type: BOOLEAN
+                                  value: true
+                                widthOfDoor:
+                                  name: widthOfDoor
+                                  type: NUMBER
+                                  value: 90
+                                  unit: cm
+                      photos:
+                        - areaTag: entrance
+                          name: Building Entrance
+                          sections:
+                            - sectionTag: main-door
+                              name: Main door
+                              urls:
+                                - https://cdn.wheeltheworld.com/photos/hotel-abc-123/entrance-01.jpg
+                                - https://cdn.wheeltheworld.com/photos/hotel-abc-123/entrance-02.jpg
+                    rooms:
+                      - id: room-001
+                        name: Accessible King Room
+                        provider:
+                          code: partner-x
+                          id: PX-00042-R1
+                        accessibility:
+                          areas:
+                            - name: shower
+                              featureSets:
+                                - type: conditional-question
+                                  featureSet:
+                                    bedHeight:
+                                      name: Bed height
+                                      type: NUMBER
+                                      value: 55
+                                      unit: cm
+                                    hasHoistCeiling:
+                                      name: Ceiling hoist available
+                                      type: BOOLEAN
+                                      value: false
+                          photos:
+                            - areaTag: bedroom
+                              name: Bedroom
+                              sections:
+                                - name: General
+                                  urls:
+                                    - https://cdn.wheeltheworld.com/photos/hotel-abc-123/room-001-01.jpg
+                standaloneProduct:
+                  summary: A tour listing
+                  value:
+                    id: tour-xyz-456
+                    type: standaloneProducts
+                    name: Wheelchair-Friendly City Tour
+                    provider:
+                      code: partner-y
+                      id: PY-00099
+                    accessibility:
+                      areas:
+                        - name: Transportation
+                          featureSets:
+                            - type: vehicle
+                              featureSet:
+                                hasWheelchairRamp:
+                                  name: Wheelchair ramp on vehicle
+                                  type: BOOLEAN
+                                  value: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Bearer token issued by Wheel the World.
+
+  parameters:
+    listingType:
+      name: listingType
+      in: path
+      required: true
+      description: |
+        The type of listing to retrieve.
+        - `placesToStay` — hotels, hostels, inns, and similar accommodations.
+        - `standaloneProducts` — activities, tours, restaurants, and similar.
+      schema:
+        $ref: '#/components/schemas/ListingType'
+    listingId:
+      name: listingId
+      in: path
+      required: true
+      description: The listing's catalog ID.
+      schema:
+        type: string
+        examples:
+          - hotel-abc-123
+
+  schemas:
+
+    ListingType:
+      type: string
+      enum:
+        - placesToStay
+        - standaloneProducts
+      description: |
+        - `placesToStay` — Hotels, hostels, inns, and similar accommodations.
+        - `standaloneProducts` — Activities, tours, restaurants, and similar.
+
+    Provider:
+      type: object
+      description: Reference to the listing in the external provider's system.
+      required:
+        - code
+        - id
+      properties:
+        code:
+          type: string
+          description: Identifier for the external data provider.
+          examples:
+            - partner-x
+        id:
+          type: string
+          description: The listing's ID in the provider's own system.
+          examples:
+            - PX-00042
+
+    AccessibilityInfo:
+      type: object
+      description: Accessibility details for a listing or room.
+      required:
+        - areas
+      properties:
+        areas:
+          type: array
+          description: Accessibility summary areas, each grouping one or more feature sets.
+          items:
+            $ref: '#/components/schemas/SummaryArea'
+        photos:
+          type: array
+          description: Optional collection of photo areas associated with the accessibility record.
+          items:
+            $ref: '#/components/schemas/PhotoArea'
+
+    SummaryArea:
+      type: object
+      required:
+        - name
+        - featureSets
+      properties:
+        name:
+          type: string
+          description: Human-readable label for this accessibility area.
+        featureSets:
+          type: array
+          description: Ordered list of feature sets that belong to this area.
+          items:
+            $ref: '#/components/schemas/FeatureSetObject'
+
+    FeatureSetObject:
+      type: object
+      required:
+        - type
+        - featureSet
+      properties:
+        type:
+          type: string
+          description: Logical type or category identifier for this feature set.
+        featureSet:
+          $ref: '#/components/schemas/FeatureSet'
+
+    FeatureSet:
+      type: object
+      description: A map of named features. Keys are feature identifiers; values are Feature objects.
+      additionalProperties:
+        $ref: '#/components/schemas/Feature'
+
+    Feature:
+      description: |
+        A single accessibility feature. The `type` field discriminates the variant:
+        - `BOOLEAN` — yes/no flag.
+        - `NUMBER` — numeric measurement, optionally with a unit.
+        - `RANGE` — numeric value constrained between `min` and `max`.
+        - `SELECT` — one or more options chosen from a predefined list.
+        - `TEXT` — free-form text.
+      oneOf:
+        - $ref: '#/components/schemas/BooleanFeature'
+        - $ref: '#/components/schemas/NumberFeature'
+        - $ref: '#/components/schemas/RangeFeature'
+        - $ref: '#/components/schemas/SelectFeature'
+        - $ref: '#/components/schemas/TextFeature'
+      discriminator:
+        propertyName: type
+        mapping:
+          BOOLEAN: '#/components/schemas/BooleanFeature'
+          NUMBER:  '#/components/schemas/NumberFeature'
+          RANGE:   '#/components/schemas/RangeFeature'
+          SELECT:  '#/components/schemas/SelectFeature'
+          TEXT:    '#/components/schemas/TextFeature'
+
+    BooleanFeature:
+      type: object
+      required:
+        - name
+        - type
+        - value
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          const: BOOLEAN
+        value:
+          type: ['boolean', 'null']
+          description: The boolean answer, or null if unanswered.
+
+    NumberFeature:
+      type: object
+      required:
+        - name
+        - type
+        - value
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          const: NUMBER
+        value:
+          type: ['number', 'null']
+          description: The numeric answer, or null if unanswered.
+        unit:
+          type: string
+          description: Optional unit of measurement (e.g. "cm", "kg").
+
+    RangeFeature:
+      type: object
+      required:
+        - name
+        - type
+        - value
+        - min
+        - max
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          const: RANGE
+        value:
+          type: ['number', 'null']
+          description: The selected value within the range, or null if unanswered.
+        min:
+          type: number
+          description: Lower bound of the range.
+        max:
+          type: number
+          description: Upper bound of the range.
+
+    SelectFeature:
+      type: object
+      required:
+        - name
+        - type
+        - value
+        - isSingleSelect
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          const: SELECT
+        value:
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/SelectFeatureOption'
+            - type: 'null'
+          description: The selected option(s), or null if unanswered.
+        isSingleSelect:
+          type: boolean
+          description: When true, only one option may be selected at a time.
+
+    SelectFeatureOption:
+      type: object
+      required:
+        - value
+        - label
+      properties:
+        value:
+          type: number
+          description: Numeric identifier for this option.
+        label:
+          type: string
+          description: Human-readable label for this option.
+
+    TextFeature:
+      type: object
+      required:
+        - name
+        - type
+        - value
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          const: TEXT
+        value:
+          type: ['string', 'null']
+          description: The text answer, or null if unanswered.
+
+    PhotoArea:
+      type: object
+      required:
+        - name
+        - sections
+      properties:
+        areaTag:
+          type: string
+          description: Optional tag used to categorize or identify this photo area.
+        name:
+          type: string
+          description: Human-readable label for this photo area.
+        sections:
+          type: array
+          description: Photo sections within this area.
+          items:
+            $ref: '#/components/schemas/PhotoSection'
+
+    PhotoSection:
+      type: object
+      required:
+        - name
+        - urls
+      properties:
+        sectionTag:
+          type: string
+          description: Optional tag used to categorize or identify this section.
+        name:
+          type: string
+          description: Human-readable label for this photo section.
+        urls:
+          type: array
+          description: List of photo URLs belonging to this section.
+          items:
+            type: string
+            format: uri
+
+    Room:
+      type: object
+      description: An individual room within a `placesToStay` listing.
+      required:
+        - id
+        - name
+        - provider
+        - accessibility
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the room within the listing.
+          examples:
+            - room-001
+        name:
+          type: string
+          description: Human-readable name of the room.
+          examples:
+            - Accessible King Room
+        provider:
+          $ref: '#/components/schemas/Provider'
+        accessibility:
+          $ref: '#/components/schemas/AccessibilityInfo'
+
+    Listing:
+      type: object
+      description: A catalog listing with accessibility information.
+      required:
+        - id
+        - type
+        - name
+        - provider
+        - accessibility
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the listing within the catalog.
+          examples:
+            - hotel-abc-123
+        type:
+          $ref: '#/components/schemas/ListingType'
+        name:
+          type: string
+          description: Human-readable name of the listing.
+          examples:
+            - The Accessible Inn
+        provider:
+          $ref: '#/components/schemas/Provider'
+        accessibility:
+          $ref: '#/components/schemas/AccessibilityInfo'
+        rooms:
+          type: array
+          description: |
+            Rooms available in this listing. Present only for listings of type
+            `placesToStay`; absent for all other listing types.
+          items:
+            $ref: '#/components/schemas/Room'
+
+    ErrorResponse:
+      type: object
+      description: Standard error body returned on 4xx responses.
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          description: Human-readable explanation of the error.
+          examples:
+            - Listing not found.
+
+  responses:
+    Unauthorized:
+      description: The Bearer token is missing or invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              value:
+                message: Unauthorized. A valid Bearer token is required.
+    NotFound:
+      description: No listing was found for the provided type and ID.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              value:
+                message: Listing not found.
